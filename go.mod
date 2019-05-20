@@ -1,4 +1,4 @@
-module github.com/byu-oit/auth-code-test
+module github.com/byu-oit/authcodetest
 
 go 1.12
 
