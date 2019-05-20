@@ -1,4 +1,4 @@
-# auth-code-test
+# authcodetest
 CLI to run authcode tests
 
 ## Quick Start
