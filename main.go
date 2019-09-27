@@ -162,7 +162,7 @@ func (a *AuthCodeService) runAuthTest() {
 func (a *AuthCodeService) getAuthCode() {
 	codeChan := make(chan string)
 	go startListener(a.Port, codeChan)
-	url := fmt.Sprintf("%s/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=PRODUCTION", a.RootURL, a.ClientID, a.Redirect)
+	url := fmt.Sprintf("%s/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=openid", a.RootURL, a.ClientID, a.Redirect)
 	if runtime.GOOS == "darwin" {
 		log.Printf("Launching Redirect URL in background: %s ", url)
 		cmd := exec.Command("/usr/bin/open", "-g", url)
@@ -201,9 +201,11 @@ func (a *AuthCodeService) getToken(method string) error {
 		data.Set("grant_type", "authorization_code")
 		data.Set("code", a.authCode)
 		data.Set("redirect_uri", a.Redirect)
+		data.Set("scope", "openid")
 	} else if method == "refresh" {
 		data.Set("grant_type", "refresh_token")
 		data.Set("refresh_token", a.refreshToken)
+		data.Set("scope", "openid")
 	} else {
 		return errors.New("Invalid Method")
 	}
@@ -225,6 +227,7 @@ func (a *AuthCodeService) getToken(method string) error {
 		json.Unmarshal(body, &response)
 		a.accessToken = response.AccessToken
 		a.refreshToken = response.RefreshToken
+		// fmt.Println(string(body))
 		return nil
 	}
 	log.Printf("Token Response Code: %d", resp.StatusCode)
