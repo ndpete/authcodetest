@@ -14,6 +14,7 @@ import (
 	"os/user"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli"
 )
@@ -26,14 +27,14 @@ type AuthCodeService struct {
 	Port         string `json:"Port"`
 	RootURL      string `json:"RootURL"`
 	authCode     string
-	accessToken  string
-	refreshToken string
+	Tokens       AuthCodeResponse
 }
 
 // AuthCodeResponse is the basic response from WSO2
 type AuthCodeResponse struct {
 	RefreshToken string `json:"refresh_token"`
 	AccessToken  string `json:"access_token"`
+	Expires      int    `json:"expires_in"`
 }
 
 func main() {
@@ -68,6 +69,19 @@ func main() {
 				},
 			},
 		},
+		{
+			Name:    "timeout",
+			Aliases: []string{"o"},
+			Usage:   "run authcode timeout test",
+			Action:  cliTimeout,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "config, c",
+					Value: getDefaultFile(),
+					Usage: "Load configuration from `FILE`",
+				},
+			},
+		},
 	}
 	err := app.Run(os.Args)
 	if err != nil {
@@ -79,6 +93,13 @@ func cliTest(c *cli.Context) error {
 	configFile := c.String("config")
 	authService := newAuthCodeServiceFromFile(configFile)
 	authService.runAuthTest()
+	return nil
+}
+
+func cliTimeout(c *cli.Context) error {
+	configFile := c.String("config")
+	authService := newAuthCodeServiceFromFile(configFile)
+	authService.timeoutTest()
 	return nil
 }
 
@@ -141,7 +162,7 @@ func (a *AuthCodeService) runAuthTest() {
 	if err != nil {
 		log.Fatal("Error getting token from auth code")
 	}
-	log.Printf("Returned Auth - Refresh: %s - AccessToken: %s", a.refreshToken, a.accessToken)
+	log.Printf("Returned Auth - Refresh: %s - AccessToken: %s", a.Tokens.RefreshToken, a.Tokens.AccessToken)
 	log.Print("Calling Echo...")
 	echo := a.callEcho()
 	log.Printf("Echo Status: %t", echo)
@@ -150,13 +171,13 @@ func (a *AuthCodeService) runAuthTest() {
 	if err != nil {
 		log.Fatal("Error refreshing token")
 	}
-	log.Printf("Returned Refresh: %s", a.refreshToken)
+	log.Printf("Returned Refresh: %s", a.Tokens.RefreshToken)
 	log.Print("Refreshing Token...")
 	err = a.getToken("refresh")
 	if err != nil {
 		log.Fatal("Error refreshing token")
 	}
-	log.Printf("Returned Refresh: %s", a.refreshToken)
+	log.Printf("Returned Refresh: %s", a.Tokens.RefreshToken)
 }
 
 func (a *AuthCodeService) getAuthCode() {
@@ -204,7 +225,7 @@ func (a *AuthCodeService) getToken(method string) error {
 		data.Set("scope", "openid")
 	} else if method == "refresh" {
 		data.Set("grant_type", "refresh_token")
-		data.Set("refresh_token", a.refreshToken)
+		data.Set("refresh_token", a.Tokens.RefreshToken)
 		data.Set("scope", "openid")
 	} else {
 		return errors.New("Invalid Method")
@@ -222,12 +243,10 @@ func (a *AuthCodeService) getToken(method string) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var response AuthCodeResponse
 	if resp.StatusCode == 200 {
-		json.Unmarshal(body, &response)
-		a.accessToken = response.AccessToken
-		a.refreshToken = response.RefreshToken
+		json.Unmarshal(body, &a.Tokens)
 		// fmt.Println(string(body))
+		// fmt.Println(a)
 		return nil
 	}
 	log.Printf("Token Response Code: %d", resp.StatusCode)
@@ -239,7 +258,7 @@ func (a *AuthCodeService) callEcho() bool {
 	echoURL := fmt.Sprintf("%s/echo/v2/ping", a.RootURL)
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", echoURL, nil)
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", a.accessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", a.Tokens.AccessToken))
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatal(err)
@@ -252,4 +271,36 @@ func (a *AuthCodeService) callEcho() bool {
 	log.Printf("ERROR: Echo status Code: %d", resp.StatusCode)
 	log.Printf("ERROR: Echo body %s", body)
 	return false
+}
+
+func (a *AuthCodeService) timeoutTest() {
+	a.getAuthCode()
+	err := a.getToken("authcode")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Refreshing token for fresh expiration")
+	a.getToken("refresh")
+	start := time.Now()
+	expires := time.Duration(a.Tokens.Expires) * time.Second
+	calcExpires := start.Add(expires)
+	log.Printf("Token: %s - Created at: %s", a.Tokens.AccessToken, start.Format("2006-01-02T15:04:05"))
+	log.Printf("Calculated Expire time: %s", calcExpires.Format("2006-01-02T15:04:05"))
+	log.Printf("Expires in: %v", a.Tokens.Expires)
+	duration := 0
+	// Add 5 minutes to the expire time to ensure a failed case
+	for duration < (a.Tokens.Expires + 300) {
+		echo := a.callEcho()
+		if echo != true {
+			break
+		}
+		log.Printf("Echo Response: %t - Elapsed: %v - Sleeping 1 second....", echo, duration)
+		time.Sleep(time.Second)
+		duration++
+	}
+	end := time.Since(start)
+	log.Printf("Total Elapsed Time: %v", end.Seconds())
+	log.Printf("Refreshing Token")
+	a.getToken("refresh")
+	log.Printf("Echo Response: %t", a.callEcho())
 }
