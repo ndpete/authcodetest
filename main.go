@@ -43,7 +43,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "AuthCode Test"
 	app.Usage = "Test authcode flow and get tokens from authcode and refresh token"
-	app.Version = "0.1.0"
+	app.Version = "0.1.1"
 	app.Commands = []cli.Command{
 		{
 			Name:    "test",
