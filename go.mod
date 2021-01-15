@@ -1,4 +1,4 @@
-module github.com/byu-oit/authcodetest
+module github.com/ndpete/authcodetest
 
 go 1.12
 

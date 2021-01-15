@@ -2,7 +2,7 @@
 CLI to run authcode tests
 
 ## Quick Start
-1. Get binary from [releases page](https://github.com/byu-oit/auth-code-test/releases) or build from source
+1. Get binary from [releases page](https://github.com/ndpete/authcodetest/releases) or build from source
 2. Run `authcodetest generate` to generate a config file. You will need your Consumer Key, Consumer Secret, Callback URL
 3. Run `authcodetest test` to run authcode test. _*Note:_ The application you used should be subscribed to the Echov2 API for best results.
 4. Run `authcodetest help` or `authcodetest help COMMAND` for more information
