@@ -26,6 +26,7 @@ type AuthCodeService struct {
 	Redirect     string `json:"Redirect"`
 	Port         string `json:"Port"`
 	RootURL      string `json:"RootURL"`
+	Scope        string
 	authCode     string
 	Tokens       AuthCodeResponse
 }
@@ -35,6 +36,7 @@ type AuthCodeResponse struct {
 	RefreshToken string `json:"refresh_token"`
 	AccessToken  string `json:"access_token"`
 	Expires      int    `json:"expires_in"`
+	IDToken      string `json:"id_token"`
 }
 
 func main() {
@@ -53,6 +55,11 @@ func main() {
 					Name:  "config, c",
 					Value: getDefaultFile(),
 					Usage: "Load configuration from `FILE`",
+				},
+				cli.StringFlag{
+					Name:  "scope, s",
+					Value: "openid",
+					Usage: "Overide default scope openid",
 				},
 			},
 		},
@@ -92,6 +99,7 @@ func main() {
 func cliTest(c *cli.Context) error {
 	configFile := c.String("config")
 	authService := newAuthCodeServiceFromFile(configFile)
+	authService.Scope = c.String("scope")
 	authService.runAuthTest()
 	return nil
 }
@@ -183,7 +191,7 @@ func (a *AuthCodeService) runAuthTest() {
 func (a *AuthCodeService) getAuthCode() {
 	codeChan := make(chan string)
 	go startListener(a.Port, codeChan)
-	url := fmt.Sprintf("%s/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=openid", a.RootURL, a.ClientID, a.Redirect)
+	url := fmt.Sprintf("%s/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=%s", a.RootURL, a.ClientID, a.Redirect, a.Scope)
 	if runtime.GOOS == "darwin" {
 		log.Printf("Launching Redirect URL in background: %s ", url)
 		cmd := exec.Command("/usr/bin/open", "-g", url)
@@ -222,11 +230,11 @@ func (a *AuthCodeService) getToken(method string) error {
 		data.Set("grant_type", "authorization_code")
 		data.Set("code", a.authCode)
 		data.Set("redirect_uri", a.Redirect)
-		data.Set("scope", "openid")
+		data.Set("scope", a.Scope)
 	} else if method == "refresh" {
 		data.Set("grant_type", "refresh_token")
 		data.Set("refresh_token", a.Tokens.RefreshToken)
-		data.Set("scope", "openid")
+		data.Set("scope", a.Scope)
 	} else {
 		return errors.New("Invalid Method")
 	}
